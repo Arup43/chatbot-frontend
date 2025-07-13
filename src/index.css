@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-gray-50 font-sans;
+  }
+}
+
+@layer components {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Custom animations */
+@keyframes typing {
+
+  0%,
+  60% {
+    opacity: 1;
+  }
+
+  30% {
+    opacity: 0.5;
+  }
+}
+
+.typing-animation {
+  animation: typing 1.5s infinite;
+}
