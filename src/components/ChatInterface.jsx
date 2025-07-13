@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, LogOut } from "lucide-react";
+import { Send, Bot, User, LogOut, Clock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "../context/AuthContext";
 import { API_ENDPOINTS } from "../config/api";
@@ -11,7 +11,7 @@ const ChatInterface = () => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, rateLimit, fetchRateLimit } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,6 +59,23 @@ const ChatInterface = () => {
         const errorText = await response.text();
         console.error("API Error:", response.status, errorText);
 
+        // If rate limit exceeded, show specific error
+        if (response.status === 429) {
+          const errorMessage = {
+            id: Date.now() + 1,
+            text: "Daily limit exceeded. You have reached your 10 requests per day limit. Please try again tomorrow.",
+            sender: "ai",
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
+          setMessages((prev) => [...prev, errorMessage]);
+          // Refresh rate limit status
+          fetchRateLimit();
+          return;
+        }
+
         // If unauthorized, logout the user
         if (response.status === 401) {
           logout();
@@ -89,6 +106,9 @@ const ChatInterface = () => {
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+
+      // Update rate limit after successful request
+      fetchRateLimit();
     } catch (error) {
       console.error("Error details:", error);
       const errorMessage = {
@@ -133,14 +153,35 @@ const ChatInterface = () => {
             </div>
           </div>
 
-          {/* Logout Button */}
-          <button
-            onClick={logout}
-            className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="text-sm">Logout</span>
-          </button>
+          <div className="flex items-center space-x-4">
+            {/* Rate Limit Display */}
+            <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 rounded-lg">
+              <Clock className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-700">
+                <span
+                  className={`font-medium ${
+                    rateLimit.remaining <= 2
+                      ? "text-red-600"
+                      : rateLimit.remaining <= 5
+                      ? "text-yellow-600"
+                      : "text-green-600"
+                  }`}
+                >
+                  {rateLimit.used}/{rateLimit.limit}
+                </span>
+                <span className="text-gray-500 ml-1">requests used</span>
+              </span>
+            </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={logout}
+              className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm">Logout</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -155,9 +196,17 @@ const ChatInterface = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-2">
                 Welcome to AI Chat
               </h3>
-              <p className="text-gray-500">
+              <p className="text-gray-500 mb-4">
                 Start a conversation by typing a message below.
               </p>
+              <div className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-50 rounded-lg">
+                <Clock className="w-4 h-4 text-blue-600" />
+                <span className="text-sm text-blue-800">
+                  You have{" "}
+                  <span className="font-medium">{rateLimit.remaining}</span>{" "}
+                  requests remaining today
+                </span>
+              </div>
             </div>
           )}
 
@@ -297,6 +346,7 @@ const ChatInterface = () => {
             </div>
           ))}
 
+          {/* Typing Indicator */}
           {isTyping && (
             <div className="flex items-start space-x-3">
               <div className="flex-shrink-0">
@@ -305,16 +355,16 @@ const ChatInterface = () => {
                 </div>
               </div>
               <div className="flex-1">
-                <div className="inline-block px-4 py-3 bg-white rounded-2xl shadow-sm border border-gray-200">
+                <div className="inline-block bg-white px-4 py-3 rounded-2xl shadow-sm border border-gray-200">
                   <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full typing-animation"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                     <div
-                      className="w-2 h-2 bg-gray-400 rounded-full typing-animation"
-                      style={{ animationDelay: "0.2s" }}
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.1s" }}
                     ></div>
                     <div
-                      className="w-2 h-2 bg-gray-400 rounded-full typing-animation"
-                      style={{ animationDelay: "0.4s" }}
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.2s" }}
                     ></div>
                   </div>
                 </div>
@@ -340,11 +390,15 @@ const ChatInterface = () => {
                   className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none scrollbar-hide"
                   rows="1"
                   style={{ minHeight: "48px", maxHeight: "120px" }}
-                  disabled={isLoading}
+                  disabled={isLoading || rateLimit.remaining <= 0}
                 />
                 <button
                   onClick={sendMessage}
-                  disabled={!inputMessage.trim() || isLoading}
+                  disabled={
+                    !inputMessage.trim() ||
+                    isLoading ||
+                    rateLimit.remaining <= 0
+                  }
                   className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-full flex items-center justify-center hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                 >
                   <Send className="w-4 h-4" />
@@ -352,9 +406,16 @@ const ChatInterface = () => {
               </div>
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-center">
-            Press Enter to send, Shift+Enter for new line
-          </p>
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-xs text-gray-500">
+              Press Enter to send, Shift+Enter for new line
+            </p>
+            {rateLimit.remaining <= 0 && (
+              <p className="text-xs text-red-500 font-medium">
+                Daily limit reached. Resets at midnight UTC.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>

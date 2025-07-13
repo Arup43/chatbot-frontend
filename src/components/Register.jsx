@@ -30,11 +30,11 @@ const Register = ({ onSwitchToLogin }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Registration failed");
+        throw new Error(data.error || "Registration failed");
       }
 
       // Auto-login after successful registration
-      login(data.user, data.token);
+      await login(data.user, data.token);
     } catch (error) {
       setError(error.message);
     } finally {

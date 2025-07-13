@@ -29,10 +29,10 @@ const Login = ({ onSwitchToRegister }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Login failed");
+        throw new Error(data.error || "Login failed");
       }
 
-      login(data.user, data.token);
+      await login(data.user, data.token);
     } catch (error) {
       setError(error.message);
     } finally {
